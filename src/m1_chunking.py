@@ -23,11 +23,51 @@ class Chunk:
 
 
 def load_documents(data_dir: str = DATA_DIR) -> list[dict]:
-    """Load all markdown/text files from data/. (Đã implement sẵn)"""
+    """Load all markdown/text files from data/, or extract text from PDFs if no md files found."""
     docs = []
-    for fp in sorted(glob.glob(os.path.join(data_dir, "*.md"))):
+    # Try loading markdown files first
+    md_files = sorted(glob.glob(os.path.join(data_dir, "*.md")))
+    for fp in md_files:
         with open(fp, encoding="utf-8") as f:
             docs.append({"text": f.read(), "metadata": {"source": os.path.basename(fp)}})
+    
+    # If no markdown files found, fallback to PDF files
+    if not docs:
+        pdf_files = sorted(glob.glob(os.path.join(data_dir, "*.pdf")))
+        if pdf_files:
+            try:
+                import fitz  # PyMuPDF is extremely fast
+                for fp in pdf_files:
+                    doc_fitz = fitz.open(fp)
+                    # To avoid CPU bottleneck during indexing, let's extract the first 10 pages
+                    pages_to_read = min(len(doc_fitz), 10)
+                    text_parts = []
+                    for i in range(pages_to_read):
+                        text_parts.append(doc_fitz[i].get_text())
+                    text = "\n\n".join(text_parts)
+                    docs.append({
+                        "text": text,
+                        "metadata": {"source": os.path.basename(fp), "pages_read": pages_to_read}
+                    })
+            except Exception as e:
+                print(f"⚠️ Error reading PDFs with PyMuPDF: {e}. Trying pypdf...")
+                try:
+                    import pypdf
+                    for fp in pdf_files:
+                        reader = pypdf.PdfReader(fp)
+                        pages_to_read = min(len(reader.pages), 10)
+                        text_parts = []
+                        for i in range(pages_to_read):
+                            page_text = reader.pages[i].extract_text()
+                            if page_text:
+                                text_parts.append(page_text)
+                        text = "\n\n".join(text_parts)
+                        docs.append({
+                            "text": text,
+                            "metadata": {"source": os.path.basename(fp), "pages_read": pages_to_read}
+                        })
+                except Exception as e2:
+                    print(f"⚠️ Error reading PDFs with pypdf: {e2}")
     return docs
 
 

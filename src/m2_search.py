@@ -117,14 +117,14 @@ class DenseSearch:
     def search(self, query: str, top_k: int = DENSE_TOP_K, collection: str = COLLECTION_NAME) -> list[SearchResult]:
         """Search using dense vectors."""
         query_vector = self._get_encoder().encode(query).tolist()
-        hits = self.client.search(
+        response = self.client.query_points(
             collection_name=collection,
-            query_vector=query_vector,
+            query=query_vector,
             limit=top_k
         )
         
         results = []
-        for hit in hits:
+        for hit in response.points:
             metadata = {k: v for k, v in hit.payload.items() if k != "text"}
             results.append(SearchResult(
                 text=hit.payload.get("text", ""),
